@@ -1,0 +1,9 @@
+_BASE_: dyneomt_online_vitl.yaml
+
+MODEL:
+  DYNAMIC:
+    HEAD_TYPE: "linear"
+    FREEZE_VIDEOMT: True
+    DISABLE_QUERY_PROPAGATION: False
+
+OUTPUT_DIR: "outputs/ablations/query_propagation/vipseg_vitl_frozen_linear"

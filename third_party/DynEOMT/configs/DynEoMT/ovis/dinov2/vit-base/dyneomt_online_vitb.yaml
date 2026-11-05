@@ -1,0 +1,11 @@
+_BASE_: ../vit-large/dyneomt_online_vitl.yaml
+
+MODEL:
+  WEIGHTS: "checkpoints/videomt/ytvis2019/yt_2019_vit_base_58.2.pth"
+  BACKBONE:
+    HIDDEN_DIM: 768
+    SEGMENTER_BLOCKS: [9, 10, 11]
+    MODEL_NAME: "vit_base_patch14_reg4_dinov2"
+    DEC_LAYERS: 3
+
+OUTPUT_DIR: "outputs/dyneomt/ovis/vit-base"

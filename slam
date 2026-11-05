@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+usage() { echo 'Usage: ./slam list | build METHODE | run METHODE /chemin/sequence_TUM | check'; }
+action="${1:-help}"
+if [[ "$action" == 'list' ]]; then
+  python3 "$root/scripts/method_catalog.py"
+  exit 0
+fi
+if [[ "$action" == 'check' ]]; then
+  python3 "$root/scripts/check_runtime.py"
+  exit 0
+fi
+[[ "$action" == build || "$action" == run ]] || { usage; exit 2; }
+method="${2:-}"
+[[ -n "$method" && "$method" != *'/'* && "$method" != '.' && "$method" != '..' && -d "$root/methods/$method" ]] || { echo 'Méthode inconnue ; consulter ./slam list.' >&2; exit 2; }
+method_dir="$root/methods/$method"
+if [[ "$action" == build ]]; then
+  if [[ "$method" == antslam_fast_cuda ]]; then method_dir="$root/methods/antslam"; fi
+  if [[ "$method" == DynSLAM ]]; then
+    docker image inspect "${DYNSLAM_BASE_IMAGE:-fastsem/nitroslam:jetson-r36.3-tumvi-speed-nostats}" >/dev/null 2>&1 || "$root/docker/nitroslam/build.sh"
+    docker image inspect "${DYNSLAM_DYNEOMT_IMAGE:-dyneomt-benchmark:jp6}" >/dev/null 2>&1 || "$root/docker/dyneomt/build.sh"
+    exec "$method_dir/build_image.sh"
+  fi
+  [[ -f "$method_dir/build.sh" ]] || { echo "Pas de build autonome pour $method ; consulter son README." >&2; exit 2; }
+  if [[ "$method" == antsslam ]]; then export ANTSSLAM_TENSORRT="${ANTSSLAM_TENSORRT:-ON}"; fi
+  exec "$method_dir/build.sh"
+fi
+sequence="${3:-}"
+[[ -d "$sequence" && -f "$sequence/rgb.txt" && -f "$sequence/depth.txt" ]] || { echo 'Fournir une séquence TUM RGB-D contenant rgb.txt et depth.txt.' >&2; exit 2; }
+[[ -f "$method_dir/run_tum.sh" ]] || { echo "Pas de lancement TUM autonome pour $method ; consulter son README." >&2; exit 2; }
+exec "$method_dir/run_tum.sh" "$(readlink -f "$sequence")"

@@ -1,0 +1,198 @@
+diff --git a/include/SemanticMasker.h b/include/SemanticMasker.h
+--- a/include/SemanticMasker.h
++++ b/include/SemanticMasker.h
+@@ -20,8 +20,10 @@ struct SemanticMaskerConfig
+     std::string maskrcnnEnginePath;
+     std::string tokenmaskModelPath;
+     std::string tokenmaskEnginePath;
+     std::string tokenmaskDataset = "ade20k";
++    std::string dyneomtCommand;
++    std::string dyneomtWorkDir = "/tmp/dynslam_dyneomt";
+     std::string dynamicLabels;
+     int deviceId = 0;
+     int dilatePixels = 3;
+     int frameStride = 1;
+@@ -37,5 +39,7 @@ struct SemanticMaskerConfig
+     int tokenmaskInputHeight = 640;
+     float tokenmaskMaskThreshold = 0.8f;
+     float tokenmaskOverlapThreshold = 0.8f;
++    float dyneomtThreshold = 0.0f;
++    bool dyneomtOutputIsFeatureMask = false;
+ };
+ 
+ class SemanticMasker
+diff --git a/src/Tracking.cc b/src/Tracking.cc
+--- a/src/Tracking.cc
++++ b/src/Tracking.cc
+@@ -459,9 +459,13 @@ SemanticMaskerConfig LoadSemanticMaskerConfig(const string &strSettingPath)
+         config.tokenmaskModelPath = stringValue;
+     if(ReadOptionalSemanticString(fSettings, "Semantic.tokenmask_engine", stringValue))
+         config.tokenmaskEnginePath = stringValue;
+     if(ReadOptionalSemanticString(fSettings, "Semantic.tokenmask_dataset", stringValue))
+         config.tokenmaskDataset = stringValue;
++    if(ReadOptionalSemanticString(fSettings, "Semantic.dyneomt_command", stringValue))
++        config.dyneomtCommand = stringValue;
++    if(ReadOptionalSemanticString(fSettings, "Semantic.dyneomt_work_dir", stringValue))
++        config.dyneomtWorkDir = stringValue;
+     if(ReadOptionalSemanticString(fSettings, "Semantic.dynamic_labels", stringValue))
+         config.dynamicLabels = stringValue;
+ 
+     if(ReadOptionalSemanticInt(fSettings, "gpu.device_id", intValue) ||
+@@ -506,9 +510,13 @@ SemanticMaskerConfig LoadSemanticMaskerConfig(const string &strSettingPath)
+         config.maskrcnnThreshold = floatValue;
+     if(ReadOptionalSemanticFloat(fSettings, "Semantic.tokenmask_mask_threshold", floatValue))
+         config.tokenmaskMaskThreshold = floatValue;
+     if(ReadOptionalSemanticFloat(fSettings, "Semantic.tokenmask_overlap_threshold", floatValue))
+         config.tokenmaskOverlapThreshold = floatValue;
++    if(ReadOptionalSemanticFloat(fSettings, "Semantic.dyneomt_threshold", floatValue))
++        config.dyneomtThreshold = floatValue;
++    if(ReadOptionalSemanticInt(fSettings, "Semantic.dyneomt_output_is_feature_mask", intValue))
++        config.dyneomtOutputIsFeatureMask = (intValue != 0);
+ 
+     return config;
+ }
+ }
+diff --git a/src/SemanticMasker.cc b/src/SemanticMasker.cc
+--- a/src/SemanticMasker.cc
++++ b/src/SemanticMasker.cc
+@@ -7,6 +7,7 @@
+ #include <cmath>
+ #include <condition_variable>
+ #include <cctype>
+ #include <cstdint>
++#include <cstdio>
+ #include <cstdlib>
+ #include <deque>
+ #include <fstream>
+@@ -56,6 +57,20 @@ std::string ToLower(std::string value)
+                    [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+     return value;
+ }
+ 
++std::string ShellQuote(const std::string &value)
++{
++    std::string quoted = "'";
++    for(size_t i = 0; i < value.size(); ++i)
++    {
++        if(value[i] == '\'')
++            quoted += "'\\''";
++        else
++            quoted += value[i];
++    }
++    quoted += "'";
++    return quoted;
++}
++
+ std::string Trim(const std::string &value)
+ {
+     const size_t begin = value.find_first_not_of(" \t\r\n");
+@@ -294,6 +309,86 @@ public:
+     virtual ~ISemanticBackend() {}
+     virtual void PredictFeatureMask(const cv::Mat &imageBgr, cv::Mat &featureMask) = 0;
+ };
+ 
++class DynEOMTExternalBackend : public ISemanticBackend
++{
++public:
++    explicit DynEOMTExternalBackend(const SemanticMaskerConfig &config)
++        : mConfig(config),
++          mCommand(config.dyneomtCommand.empty()
++                       ? std::string("/usr/local/bin/dyneomt_predict_mask.sh")
++                       : config.dyneomtCommand),
++          mWorkDir(config.dyneomtWorkDir.empty()
++                       ? std::string("/tmp/dynslam_dyneomt")
++                       : config.dyneomtWorkDir),
++          mCounter(0)
++    {
++        if(mCommand.empty())
++            throw std::runtime_error("DynEOMT backend requires Semantic.dyneomt_command");
++        mkdir(mWorkDir.c_str(), 0755);
++    }
++
++    void PredictFeatureMask(const cv::Mat &imageBgr, cv::Mat &featureMask) override
++    {
++        if(imageBgr.empty())
++            throw std::runtime_error("DynEOMT backend received an empty image");
++
++        const unsigned long long request = ++mCounter;
++        const std::string prefix = JoinPath(mWorkDir, "frame_" + std::to_string(request));
++        const std::string inputPath = prefix + "_rgb.png";
++        const std::string outputPath = prefix + "_dynamic.png";
++
++        if(!cv::imwrite(inputPath, imageBgr))
++            throw std::runtime_error("DynEOMT backend failed to write input image: " + inputPath);
++
++        std::ostringstream command;
++        command << "DYN_SLAM_INPUT=" << ShellQuote(inputPath)
++                << " DYN_SLAM_OUTPUT=" << ShellQuote(outputPath)
++                << " DYN_SLAM_WIDTH=" << imageBgr.cols
++                << " DYN_SLAM_HEIGHT=" << imageBgr.rows
++                << " " << mCommand;
++
++        const int status = std::system(command.str().c_str());
++        if(status != 0)
++        {
++            std::remove(inputPath.c_str());
++            throw std::runtime_error("DynEOMT backend command failed: " + mCommand);
++        }
++
++        cv::Mat rawMask = cv::imread(outputPath, cv::IMREAD_GRAYSCALE);
++        std::remove(inputPath.c_str());
++        std::remove(outputPath.c_str());
++        if(rawMask.empty())
++            throw std::runtime_error("DynEOMT backend did not produce a readable mask: " + outputPath);
++
++        if(rawMask.size() != imageBgr.size())
++            cv::resize(rawMask, rawMask, imageBgr.size(), 0.0, 0.0, cv::INTER_NEAREST);
++
++        cv::Mat mask8;
++        if(rawMask.type() == CV_8UC1)
++            mask8 = rawMask;
++        else
++            rawMask.convertTo(mask8, CV_8U);
++
++        if(mConfig.dyneomtOutputIsFeatureMask)
++        {
++            cv::threshold(mask8, featureMask, 0.0, 255.0, cv::THRESH_BINARY);
++            return;
++        }
++
++        cv::Mat dynamicMask;
++        cv::threshold(mask8, dynamicMask,
++                      static_cast<double>(std::max(0.0f, mConfig.dyneomtThreshold)),
++                      255.0, cv::THRESH_BINARY);
++        DynamicToFeatureMask(dynamicMask, mConfig.dilatePixels, featureMask);
++    }
++
++private:
++    SemanticMaskerConfig mConfig;
++    std::string mCommand;
++    std::string mWorkDir;
++    std::atomic<unsigned long long> mCounter;
++};
++
+ #ifdef LITESEMSLAM_USE_TENSORRT_SEMANTICS
+ class TrtLogger : public nvinfer1::ILogger
+ {
+@@ -1585,9 +1680,12 @@ private:
+ 
+ std::unique_ptr<ISemanticBackend> CreateBackend(const SemanticMaskerConfig &config)
+ {
++    const std::string backend = ToLower(config.backend);
++    if(backend == "dyneomt" || backend == "dyn_eomt" || backend == "dyn-eomt")
++        return std::unique_ptr<ISemanticBackend>(new DynEOMTExternalBackend(config));
++
+ #ifdef LITESEMSLAM_USE_TENSORRT_SEMANTICS
+-    const std::string backend = ToLower(config.backend);
+     if(backend == "segnet")
+         return std::unique_ptr<ISemanticBackend>(new SegNetTensorRTBackend(config));
+     if(backend == "maskrcnn" || backend == "mask_rcnn")
+@@ -1597,7 +1695,7 @@ std::unique_ptr<ISemanticBackend> CreateBackend(const SemanticMaskerConfig &conf
+         return std::unique_ptr<ISemanticBackend>(new TokenMaskTensorRTBackend(config));
+     throw std::runtime_error("unsupported semantic backend: " + config.backend);
+ #else
+-    (void)config;
++    (void)backend;
+     throw std::runtime_error("LiteSemSLAM was built without TensorRT semantic support");
+ #endif
+ }

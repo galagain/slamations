@@ -1,0 +1,177 @@
+[
+  {
+    "path": "third_party/gpu-block-solver",
+    "origin": "https://github.com/sfu-rsl/gpu-block-solver.git",
+    "commit": "50a467f2d3912101166c550c9744c004da1c3354",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/dataflow-orbslam",
+    "origin": "https://github.com/xaldyz/dataflow-orbslam.git",
+    "commit": "dbc344b09b81063935e32d1b9739e77e5f0c98c1",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/ORB_SLAM3",
+    "origin": "https://github.com/UZ-SLAMLab/ORB_SLAM3.git",
+    "commit": "4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4",
+    "local_changes": true
+  },
+  {
+    "path": "third_party/ORB_SLAM2",
+    "origin": "https://github.com/raulmur/ORB_SLAM2.git",
+    "commit": "f2e6f51cdc8d067655d90a78c06261378e07e8f3",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/Jetson-SLAM",
+    "origin": "https://github.com/ashishkumar822/Jetson-SLAM.git",
+    "commit": "6d47378bf40d2c344eb1a204c75bb16d9043f52a",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/FastTrack",
+    "origin": "https://github.com/sfu-rsl/FastTrack.git",
+    "commit": "68f3d791e27d9961123dad8b0a41a0bbccf78cb0",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/DynEOMT",
+    "origin": "",
+    "commit": "af740ed29bc5ad667048c1afce6568fcd3d070e6",
+    "local_changes": true
+  },
+  {
+    "path": "third_party/isaac_ros_visual_slam",
+    "origin": "https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam.git",
+    "commit": "4720ec71e4707d84cdd11d66e31331b29d83bf78",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/AntSSLAM",
+    "origin": "https://github.com/UZ-SLAMLab/ORB_SLAM3.git",
+    "commit": "4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4",
+    "local_changes": true
+  },
+  {
+    "path": "third_party/ORB_SLAM2_CUDA",
+    "origin": "https://github.com/thien94/ORB_SLAM2_CUDA.git",
+    "commit": "4a6156cf75b22630a6d5eceee590a2b29ab48452",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/Pangolin-v0.5",
+    "origin": "https://github.com/stevenlovegrove/Pangolin.git",
+    "commit": "7987c9ba6b6c2c46fdcf50baae28bfa4f8352696",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/rpg_ultimate_slam_open",
+    "origin": "https://github.com/uzh-rpg/rpg_ultimate_slam_open.git",
+    "commit": "7c12a948d57bee67a21d0063f75a24ade9bb5074",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/TurboMap",
+    "origin": "https://github.com/sfu-rsl/TurboMap.git",
+    "commit": "38114452bb8de6b37cb3125f227788d7b1d2e4a0",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/FastLoop",
+    "origin": "https://github.com/sfu-rsl/FastLoop.git",
+    "commit": "eb2050fe56d6f6cc7bf5c27122332e2a7aabd9b4",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/ibow-lcd",
+    "origin": "https://github.com/emiliofidalgo/ibow-lcd.git",
+    "commit": "0804b1eec5db88b3d252c02617b6c95b91ca0a96",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/cuda-accelerated-orb-slam",
+    "origin": "https://git.hipert.unimore.it/fmuzzini/cuda-accelerated-orb-slam.git",
+    "commit": "3a6be9dc11667194ada66ac5e08cab9cc3e65f20",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/AntSLAM",
+    "origin": "https://github.com/UZ-SLAMLab/ORB_SLAM3.git",
+    "commit": "4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4",
+    "local_changes": true
+  },
+  {
+    "path": "third_party/Kimera",
+    "origin": "https://github.com/MIT-SPARK/Kimera.git",
+    "commit": "fc33760636068ea0b2dca5e9d7958ee9a03888b1",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/gpu-block-solver/g2o/EXTERNAL/compute-engine",
+    "origin": "https://github.com/sfu-rsl/compute-engine.git",
+    "commit": "e74c0e6a4be6ebd437277dd722f1449c7b3b1e36",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/gpu-block-solver/g2o/EXTERNAL/compute-engine/external/kompute",
+    "origin": "https://github.com/sfu-rsl/kompute.git",
+    "commit": "09d78fd6da9221f096aa89b95b15beb71053acb8",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/gpu-block-solver/g2o/EXTERNAL/compute-engine/external/kompute/external/VulkanMemoryAllocator",
+    "origin": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
+    "commit": "2a7110f07854d86ea6dbfddf58cea40d81f8be70",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/TurboMap/Thirdparty/g2o/compute-engine",
+    "origin": "git@github.com:sfu-rsl/compute-engine.git",
+    "commit": "e74c0e6a4be6ebd437277dd722f1449c7b3b1e36",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/TurboMap/Thirdparty/g2o/compute-engine/external/kompute",
+    "origin": "https://github.com/sfu-rsl/kompute.git",
+    "commit": "09d78fd6da9221f096aa89b95b15beb71053acb8",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/TurboMap/Thirdparty/g2o/compute-engine/external/kompute/external/VulkanMemoryAllocator",
+    "origin": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
+    "commit": "2a7110f07854d86ea6dbfddf58cea40d81f8be70",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/FastLoop/Thirdparty/graphite",
+    "origin": "git@github.com:sfu-rsl/graphite.git",
+    "commit": "779a26b27c55b345db94cdbebff7e981ec85e797",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/FastLoop/Thirdparty/g2o/compute-engine",
+    "origin": "git@github.com:sfu-rsl/compute-engine.git",
+    "commit": "e74c0e6a4be6ebd437277dd722f1449c7b3b1e36",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/FastLoop/Thirdparty/g2o/compute-engine/external/kompute",
+    "origin": "https://github.com/sfu-rsl/kompute.git",
+    "commit": "09d78fd6da9221f096aa89b95b15beb71053acb8",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/FastLoop/Thirdparty/g2o/compute-engine/external/kompute/external/VulkanMemoryAllocator",
+    "origin": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
+    "commit": "2a7110f07854d86ea6dbfddf58cea40d81f8be70",
+    "local_changes": false
+  },
+  {
+    "path": "third_party/Nitro-SLAM",
+    "origin": "https://github.com/sfu-rsl/Nitro-SLAM.git",
+    "commit": "8a8ea7d768d316c2ee72dc1b13e1199f35a09f0a",
+    "local_changes": false,
+    "notes": "Recette et correctif de docker/nitroslam issus de nitroslam_launcher local ; sources nettoy\u00e9es des donn\u00e9es exemples."
+  }
+]

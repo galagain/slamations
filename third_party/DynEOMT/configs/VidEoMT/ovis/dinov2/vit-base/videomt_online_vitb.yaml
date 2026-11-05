@@ -1,0 +1,32 @@
+_BASE_: ../vit-large/videomt_online_vitl.yaml
+
+MODEL:
+  WEIGHTS: "checkpoints/videomt/ytvis2019/yt_2019_vit_base_58.2.pth"
+  BACKBONE:
+    HIDDEN_DIM: 768
+    SEGMENTER_BLOCKS: [9, 10, 11]
+    MODEL_NAME: "vit_base_patch14_reg4_dinov2"
+    DEC_LAYERS: 3
+
+SOLVER:
+  IMS_PER_BATCH: 1
+  BASE_LR: 0.0000125
+  CHECKPOINT_PERIOD: 10000
+
+INPUT:
+  SAMPLING_FRAME_NUM: 3
+  SAMPLING_FRAME_RANGE: 1
+  REVERSE_AGU: False
+
+TEST:
+  EVAL_PERIOD: 10000
+
+DATASETS:
+  TRAIN: ("ovis_train",)
+  TEST: ("ovis_val",)
+  DATASET_RATIO: [1.0]
+  DATASET_NEED_MAP: [False]
+  DATASET_TYPE: ["video_instance"]
+  DATASET_TYPE_TEST: ["video_instance"]
+
+OUTPUT_DIR: "outputs/videomt_retrain/ovis/vit-base"

@@ -1,0 +1,215 @@
+FROM nvcr.io/nvidia/l4t-jetpack:r36.3.0
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    DYNASLAM_ROOT=/opt/DynaSLAM
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential ca-certificates cmake git libboost-all-dev libeigen3-dev \
+    libgl1-mesa-dev mesa-utils libglew-dev libgtk2.0-dev libopencv-dev \
+    libpython2.7 libpython2.7-dev libqt5opengl5-dev qtbase5-dev \
+    python2 python2.7 python-pip unzip wget \
+ && ln -sf /usr/bin/python2.7 /usr/local/bin/python \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch v0.5 --depth 1 https://github.com/stevenlovegrove/Pangolin.git /opt/Pangolin-v0.5 \
+ && mkdir -p /opt/Pangolin-v0.5/build \
+ && cd /opt/Pangolin-v0.5/build \
+ && cmake .. -DCMAKE_BUILD_TYPE=Release \
+ && make -j"$(nproc)" \
+ && make install \
+ && ldconfig
+
+COPY common /opt/slam_common
+COPY scripts /usr/local/bin
+COPY src ${DYNASLAM_ROOT}
+
+WORKDIR ${DYNASLAM_ROOT}
+RUN chmod +x /usr/local/bin/*.sh /opt/slam_common/*.py /opt/slam_common/*.sh || true \
+ && python -m pip install --upgrade pip==20.3.4 setuptools wheel \
+ && python -m pip install numpy==1.16.6
+
+RUN python - <<'PY'
+import os
+import subprocess
+
+p = "CMakeLists.txt"
+with open(p, "r") as f:
+    s = f.read()
+numpy_include = subprocess.check_output([
+    "python", "-c", "import numpy; print(numpy.get_include())"
+]).strip()
+numpy_include = os.path.join(numpy_include, "numpy")
+s = s.replace(
+    "find_package(PythonLibs REQUIRED)",
+    "set(PYTHON_EXECUTABLE /usr/bin/python2.7)\n"
+    "set(PYTHON_INCLUDE_DIR /usr/include/python2.7)\n"
+    "set(PYTHON_LIBRARY /usr/lib/aarch64-linux-gnu/libpython2.7.so)\n"
+    "find_package(PythonLibs 2.7 REQUIRED)"
+)
+s = s.replace("/usr/lib/x86_64-linux-gnu/libpython2.7.so", "${PYTHON_LIBRARIES}")
+s = s.replace("/usr/local/lib/python2.7/dist-packages/numpy/core/include/numpy", numpy_include)
+s = s.replace("/usr/lib/python2.7/dist-packages/numpy/core/include/numpy/", numpy_include + "/")
+s = s.replace(
+    "\nadd_executable(mono_carla\nExamples/Monocular/mono_carla.cc)\n"
+    "target_link_libraries(mono_carla ${PROJECT_NAME})\n",
+    "\n"
+)
+opencv_block = """message("PROJECT_SOURCE_DIR: " ${OpenCV_DIR})
+find_package(OpenCV 2.4.11 QUIET)
+if(NOT OpenCV_FOUND)
+    message("OpenCV > 2.4.11 not found.")
+    find_package(OpenCV 3.0 QUIET)
+    if(NOT OpenCV_FOUND)
+        message(FATAL_ERROR "OpenCV > 3.0 not found.")
+    endif()
+endif()
+"""
+s = s.replace(opencv_block, 'message("OpenCV_DIR: " ${OpenCV_DIR})\nfind_package(OpenCV REQUIRED)\n')
+with open(p, "w") as f:
+    f.write(s)
+
+p = "Thirdparty/DBoW2/CMakeLists.txt"
+with open(p, "r") as f:
+    s = f.read()
+opencv_block = """find_package(OpenCV 3.0 QUIET)
+if(NOT OpenCV_FOUND)
+   find_package(OpenCV 2.4.3 QUIET)
+   if(NOT OpenCV_FOUND)
+      message(FATAL_ERROR "OpenCV > 2.4.3 not found.")
+   endif()
+endif()
+"""
+s = s.replace(opencv_block, "find_package(OpenCV REQUIRED)\n")
+with open(p, "w") as f:
+    f.write(s)
+
+replacements = {
+    "CV_LOAD_IMAGE_UNCHANGED": "cv::IMREAD_UNCHANGED",
+    "CV_GRAY2BGR": "cv::COLOR_GRAY2BGR",
+    "CV_RGB2GRAY": "cv::COLOR_RGB2GRAY",
+    "CV_BGR2GRAY": "cv::COLOR_BGR2GRAY",
+    "CV_RGBA2GRAY": "cv::COLOR_RGBA2GRAY",
+    "CV_BGRA2GRAY": "cv::COLOR_BGRA2GRAY",
+    "CV_REDUCE_SUM": "cv::REDUCE_SUM",
+    "CV_SORT_EVERY_COLUMN": "cv::SORT_EVERY_COLUMN",
+    "CV_SORT_DESCENDING": "cv::SORT_DESCENDING",
+}
+for root, _, files in os.walk("."):
+    for name in files:
+        if not name.endswith((".cc", ".cpp", ".h", ".hpp")):
+            continue
+        path = os.path.join(root, name)
+        with open(path, "r") as f:
+            text = f.read()
+        updated = text
+        for old, new in replacements.items():
+            updated = updated.replace(old, new)
+        if updated != text:
+            with open(path, "w") as f:
+                f.write(updated)
+
+p = "include/ORBextractor.h"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace("#include <opencv/cv.h>", "#include <opencv2/opencv.hpp>")
+with open(p, "w") as f:
+    f.write(s)
+
+p = "include/PnPsolver.h"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace(
+    "#include <opencv2/core/core.hpp>\n",
+    "#include <opencv2/core/core.hpp>\n#include <opencv2/core/core_c.h>\n"
+)
+with open(p, "w") as f:
+    f.write(s)
+
+p = "include/LoopClosing.h"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace(
+    "Eigen::aligned_allocator<std::pair<const KeyFrame*, g2o::Sim3> > > KeyFrameAndPose;",
+    "Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3> > > KeyFrameAndPose;"
+)
+with open(p, "w") as f:
+    f.write(s)
+
+p = "include/Conversion.h"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace(
+    "#include <opencv2/core/core.hpp>\n",
+    "#include <opencv2/core/core.hpp>\n#include <opencv2/core/types_c.h>\n"
+)
+with open(p, "w") as f:
+    f.write(s)
+
+p = "src/Conversion.cc"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace(
+    "bool allocate(UMatData* u, int accessflags, UMatUsageFlags usageFlags) const",
+    "bool allocate(UMatData* u, AccessFlag accessflags, UMatUsageFlags usageFlags) const"
+)
+s = s.replace(
+    "void* data, size_t* step, int flags, UMatUsageFlags usageFlags) const",
+    "void* data, size_t* step, AccessFlag flags, UMatUsageFlags usageFlags) const"
+)
+s = s.replace(
+    "void map(UMatData* data, int accessflags) const",
+    "void map(UMatData* data, AccessFlag accessflags) const"
+)
+with open(p, "w") as f:
+    f.write(s)
+
+p = "Examples/RGB-D/rgbd_tum.cc"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace(
+    "#include <unistd.h>\n",
+    "#include <unistd.h>\n#include <cstdlib>\n"
+)
+s = s.replace(
+    "ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true);",
+    "bool useViewer = false;\n"
+    "    const char* viewerEnv = std::getenv(\"DYNASLAM_VIEWER\");\n"
+    "    if(viewerEnv != NULL && std::string(viewerEnv) != \"0\" && std::string(viewerEnv) != \"false\") useViewer = true;\n"
+    "    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,useViewer);"
+)
+s = s.replace(
+    "    // Stop all threads\n"
+    "    SLAM.Shutdown();",
+    "    // Save once before shutdown so long cleanup cannot discard the TUM trajectory.\n"
+    "    SLAM.SaveTrajectoryTUM(\"CameraTrajectory.txt\");\n"
+    "    SLAM.SaveKeyFrameTrajectoryTUM(\"KeyFrameTrajectory.txt\");\n\n"
+    "    // Stop all threads\n"
+    "    SLAM.Shutdown();"
+)
+s = s.replace(
+    "    for(int ni=0; ni<nImages; ni++)\n"
+    "    {\n",
+    "    for(int ni=0; ni<nImages; ni++)\n"
+    "    {\n"
+    "        if(ni % 50 == 0) std::cout << \"DynaSLAM frame \" << ni << \"/\" << nImages << std::endl;\n"
+)
+with open(p, "w") as f:
+    f.write(s)
+
+p = "src/Tracking.cc"
+with open(p, "r") as f:
+    s = f.read()
+s = s.replace(
+    "    mGeometry.GeometricModelCorrection(mCurrentFrame,mImGray,imMask);\n",
+    "    mGeometry.GeometricModelCorrection(mCurrentFrame,imDepth,imMask);\n"
+)
+with open(p, "w") as f:
+    f.write(s)
+PY
+
+RUN if [ -f Vocabulary/ORBvoc.txt.tar.gz ] && [ ! -f Vocabulary/ORBvoc.txt ]; then tar -xf Vocabulary/ORBvoc.txt.tar.gz -C Vocabulary; fi \
+ && chmod +x build.sh \
+ && ./build.sh
+
+WORKDIR /workspace
+ENTRYPOINT ["/bin/bash"]

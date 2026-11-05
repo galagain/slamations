@@ -1,0 +1,38 @@
+_BASE_: ../../../../VidEoMT/ytvis22/dinov2/vit-large/videomt_online_vitl.yaml
+
+MODEL:
+  WEIGHTS: "checkpoints/yt_2022_vit_large_42.6.pth"
+  DYNAMIC:
+    ENABLED: True
+    DATASET: "ytvis2022"
+    TARGET_ROOT: "outputs/dynamic_targets/labels"
+    REQUIRED: True
+    WEIGHT: 1.0
+    POS_WEIGHT: 0.5052
+    HIDDEN_DIM: 256
+    LR_MULTIPLIER: 8.0
+    EVAL_ENABLED: True
+    EVAL_IOU_THRESHOLD: 0.5
+
+DATASETS:
+  TRAIN: ("ytvis_2022_train",)
+  TEST: ("ytvis_2022_val",)
+  DATASET_RATIO: [1.0]
+  DATASET_NEED_MAP: [False]
+  DATASET_TYPE: ["video_instance"]
+  DATASET_TYPE_TEST: ["video_instance"]
+
+SOLVER:
+  IMS_PER_BATCH: 1
+  BASE_LR: 0.0000125
+  CHECKPOINT_PERIOD: 10000
+
+INPUT:
+  SAMPLING_FRAME_NUM: 3
+  SAMPLING_FRAME_RANGE: 1
+  REVERSE_AGU: False
+
+TEST:
+  EVAL_PERIOD: 10000
+
+OUTPUT_DIR: "outputs/dyneomt/ytvis2022/vit-large"

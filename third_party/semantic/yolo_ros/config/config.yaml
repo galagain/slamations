@@ -1,0 +1,4 @@
+yolov5:
+  action: False
+  device: gpu
+  img_size: 640

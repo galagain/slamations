@@ -1,0 +1,320 @@
+#pragma once
+#include <graphite/common.hpp>
+#include <graphite/stream.hpp>
+#include <graphite/vector.hpp>
+#include <graphite/visitor.hpp>
+#include <type_traits>
+
+namespace graphite {
+
+template <typename, typename = void>
+struct has_type_alias_State : std::false_type {};
+
+template <typename T>
+struct has_type_alias_State<T, std::void_t<typename T::State>>
+    : std::true_type {};
+
+template <typename T, typename Fallback, typename = void> struct get_State_or {
+  using type = Fallback;
+};
+
+// Specialization: use T::State if it exists
+template <typename T, typename Fallback>
+struct get_State_or<T, Fallback, std::void_t<typename T::State>> {
+  using type = typename T::State;
+};
+
+// Helper alias
+template <typename T, typename Fallback>
+using get_State_or_t = typename get_State_or<T, Fallback>::type;
+
+template <typename VertexType, typename State, typename Traits, typename T>
+__global__ void backup_state_kernel(VertexType **vertices, State *dst,
+                                    const uint8_t *active_state,
+                                    const size_t num_vertices) {
+
+  const size_t vertex_id = get_thread_id();
+
+  if (vertex_id >= num_vertices || !is_vertex_active(active_state, vertex_id))
+    return;
+  if constexpr (has_type_alias_State<Traits>::value) {
+    dst[vertex_id] = Traits::get_state(*vertices[vertex_id]);
+  } else {
+    dst[vertex_id] = *vertices[vertex_id];
+  }
+}
+
+template <typename VertexType, typename State, typename Traits, typename T>
+__global__ void set_state_kernel(VertexType **vertices, const State *src,
+                                 const uint8_t *active_state,
+                                 const size_t num_vertices) {
+
+  const size_t vertex_id = get_thread_id();
+
+  if (vertex_id >= num_vertices || !is_vertex_active(active_state, vertex_id))
+    return;
+
+  if constexpr (has_type_alias_State<Traits>::value) {
+    Traits::set_state(*vertices[vertex_id], src[vertex_id]);
+  } else {
+    *vertices[vertex_id] = src[vertex_id];
+  }
+}
+
+template <typename T, typename S> class BaseVertexDescriptor {
+public:
+  using InvP = std::conditional_t<is_low_precision<S>::value, T, S>;
+
+  virtual ~BaseVertexDescriptor(){};
+
+  // virtual void update(const T* x, const T* delta) = 0;
+  virtual void apply_step_async(GraphVisitor<T, S> &visitor, const T *delta_x,
+                                T *jacobian_scales, cudaStream_t stream) = 0;
+  virtual void augment_block_diagonal(GraphVisitor<T, S> &visitor,
+                                      InvP *block_diagonal, T mu) = 0;
+  virtual void apply_block_jacobi(GraphVisitor<T, S> &visitor, T *z, const T *r,
+                                  InvP *block_diagonal,
+                                  cudaStream_t stream) = 0;
+
+  virtual size_t dimension() const = 0;
+  virtual size_t count() const = 0;
+
+  virtual void backup_parameters_async() = 0;
+  virtual void restore_parameters_async() = 0;
+  virtual void to_device() = 0;
+  virtual void to_host() = 0;
+
+  virtual const std::unordered_map<size_t, size_t> &get_global_map() const = 0;
+  virtual const size_t *get_hessian_ids() const = 0;
+  virtual void set_hessian_column(const size_t global_id,
+                                  const size_t hessian_column,
+                                  const size_t block_index) = 0;
+  virtual bool is_fixed(const size_t id) const = 0;
+  virtual bool is_active(const size_t id) const = 0;
+  virtual uint8_t *get_active_state() const = 0;
+  virtual const size_t *get_block_ids() const = 0;
+};
+
+template <typename T, typename S, typename VTraits>
+class VertexDescriptor : public BaseVertexDescriptor<T, S> {
+public:
+  using InvP = std::conditional_t<is_low_precision<S>::value, T, S>;
+
+  using Traits = VTraits;
+
+  using VertexType = typename Traits::Vertex;
+  using State = get_State_or_t<Traits, VertexType>;
+
+private:
+  thrust::device_vector<VertexType *> x_device;
+  thrust::host_vector<VertexType *> x_host;
+  thrust::device_vector<State> backup_state;
+
+public:
+  // Mappings
+  std::unordered_map<size_t, size_t> global_to_local_map;
+  std::vector<size_t> local_to_global_map;
+  thrust::host_vector<size_t> local_to_hessian_offsets;
+  thrust::device_vector<size_t> hessian_ids;
+  managed_vector<size_t> block_ids;
+  managed_vector<uint8_t> active_state;
+
+  static constexpr size_t dim = Traits::dimension;
+
+public:
+  virtual ~VertexDescriptor(){};
+
+  void apply_step_async(GraphVisitor<T, S> &visitor, const T *delta_x,
+                        T *jacobian_scales, cudaStream_t stream) override {
+    visitor.template apply_step(this, delta_x, jacobian_scales, stream);
+  }
+
+  void augment_block_diagonal(GraphVisitor<T, S> &visitor, InvP *block_diagonal,
+                              T mu) override {
+    visitor.template augment_block_diagonal(this, block_diagonal, mu);
+  }
+
+  void apply_block_jacobi(GraphVisitor<T, S> &visitor, T *z, const T *r,
+                          InvP *block_diagonal, cudaStream_t stream) override {
+    visitor.template apply_block_jacobi(this, z, r, block_diagonal, stream);
+  }
+
+  virtual void to_device() override {
+    x_device = x_host;
+    hessian_ids = local_to_hessian_offsets;
+  }
+
+  virtual void to_host() override { x_host = x_device; }
+
+  VertexType **vertices() { return x_device.data().get(); }
+
+  virtual void backup_parameters_async() override {
+    VertexType **vertices = x_device.data().get();
+
+    const int num_vertices = static_cast<int>(count());
+    const int num_threads = num_vertices;
+    const int block_size = 256;
+    const auto num_blocks = (num_threads + block_size - 1) / block_size;
+    backup_state.resize(num_vertices);
+
+    backup_state_kernel<VertexType, State, Traits, T>
+        <<<num_blocks, block_size>>>(vertices, backup_state.data().get(),
+                                     active_state.data().get(), num_vertices);
+  }
+
+  virtual void restore_parameters_async() override {
+    VertexType **vertices = x_device.data().get();
+
+    const int num_vertices = static_cast<int>(count());
+    const int num_threads = num_vertices;
+    const int block_size = 256;
+    const auto num_blocks = (num_threads + block_size - 1) / block_size;
+    set_state_kernel<VertexType, State, Traits, T>
+        <<<num_blocks, block_size>>>(vertices, backup_state.data().get(),
+                                     active_state.data().get(), num_vertices);
+  }
+
+  virtual size_t count() const override { return x_host.size(); }
+
+  void reserve(size_t size) {
+    x_host.reserve(size);
+    global_to_local_map.reserve(size);
+    local_to_global_map.reserve(size);
+    local_to_hessian_offsets.reserve(size);
+    block_ids.reserve(size);
+    active_state.reserve(size);
+  }
+
+  void remove_vertex(const size_t id) {
+    if (count() == 0) {
+      return;
+    }
+
+    if (global_to_local_map.find(id) == global_to_local_map.end()) {
+      std::cerr << "Vertex with id " << id << " not found." << std::endl;
+      return;
+    }
+
+    const auto local_id = global_to_local_map[id];
+    const auto last_index = x_host.size() - 1;
+
+    // Swap the vertex to be removed with the last vertex
+    std::swap(x_host[local_id], x_host[last_index]);
+
+    if (local_to_hessian_offsets.size() > 0) { // may not be initialized yet
+      std::swap(local_to_hessian_offsets[local_id],
+                local_to_hessian_offsets[last_index]);
+    }
+
+    // Update the global_to_local_map for the swapped vertex
+    const auto last_global_id = local_to_global_map[last_index];
+    global_to_local_map[last_global_id] = local_id;
+    local_to_global_map[local_id] = last_global_id;
+
+    // Only need to update the fixed mask for the swapped vertex
+    active_state[local_id] = active_state[last_index];
+
+    // Remove unused entry
+    active_state.pop_back();
+
+    // Remove the last vertex
+    x_host.pop_back();
+    local_to_hessian_offsets.pop_back();
+    global_to_local_map.erase(id);
+    local_to_global_map.pop_back();
+    block_ids.pop_back();
+  }
+
+  void replace_vertex(const size_t id, VertexType *vertex) {
+    if (global_to_local_map.find(id) == global_to_local_map.end()) {
+      std::cerr << "Vertex with id " << id << " not found." << std::endl;
+      return;
+    }
+
+    const auto local_id = global_to_local_map[id];
+    x_host[local_id] = vertex;
+  }
+
+  void add_vertex(const size_t id, VertexType *vertex,
+                  const bool fixed = false) {
+    x_host.push_back(vertex);
+    const auto local_id = x_host.size() - 1;
+    global_to_local_map.insert({id, local_id});
+    local_to_global_map.push_back(id);
+    local_to_hessian_offsets.push_back(0); // Initialize to 0
+    block_ids.push_back(0);                // Initialize to 0
+
+    // Update fixed mask
+    active_state.push_back(static_cast<uint8_t>(fixed));
+  }
+
+  void set_fixed(const size_t id, const bool fixed) {
+    const auto local_id = global_to_local_map.at(id);
+    // Don't preserve MSB flag
+    active_state[local_id] = static_cast<uint8_t>(fixed);
+  }
+
+  bool is_fixed(const size_t id) const override {
+    const auto local_id = global_to_local_map.at(id);
+    return (active_state[local_id] & 0x1) > 0;
+  }
+
+  bool is_active(const size_t id) const override {
+    const auto local_id = global_to_local_map.at(id);
+    return is_vertex_active(active_state.data().get(), local_id);
+  }
+
+  uint8_t *get_active_state() const override {
+    return active_state.data().get();
+  }
+
+  const size_t *get_block_ids() const override {
+    return block_ids.data().get();
+  }
+
+  VertexType *get_vertex(const size_t id) {
+    auto it = global_to_local_map.find(id);
+    if (it != global_to_local_map.end()) {
+      return x_host[it->second];
+    } else {
+      std::cerr << "Vertex with id " << id << " not found." << std::endl;
+      return nullptr;
+    }
+  }
+
+  bool exists(const size_t id) const {
+    return global_to_local_map.find(id) != global_to_local_map.end();
+  }
+
+  const std::unordered_map<size_t, size_t> &get_global_map() const override {
+    return global_to_local_map;
+  }
+
+  size_t dimension() const override { return dim; }
+
+  const size_t *get_hessian_ids() const override {
+    return hessian_ids.data().get();
+  }
+
+  void set_hessian_column(const size_t global_id, const size_t hessian_column,
+                          const size_t block_index) {
+    const auto local_id = global_to_local_map.at(global_id);
+    local_to_hessian_offsets[local_id] = hessian_column;
+    block_ids[local_id] = block_index;
+  }
+
+  void clear() {
+    x_device.clear();
+    x_host.clear();
+    backup_state.clear();
+
+    global_to_local_map.clear();
+    local_to_global_map.clear();
+    local_to_hessian_offsets.clear();
+    hessian_ids.clear();
+    block_ids.clear();
+    active_state.clear();
+  }
+};
+
+} // namespace graphite

@@ -1,0 +1,32 @@
+FROM dustynv/pytorch:2.7-r36.4.0
+
+ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git zlib1g-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    uv pip install --system pybind11 wheel setuptools ninja cmake
+
+RUN python3 -c "import urllib.request; urllib.request.urlretrieve('https://oaitriton.blob.core.windows.net/public/llvm-builds/llvm-a66376b0-ubuntu-arm64.tar.gz', '/tmp/llvm.parallel.tar.gz')"
+
+RUN mkdir -p /root/.triton/llvm && \
+    tar -xzf /tmp/llvm.parallel.tar.gz -C /root/.triton/llvm && \
+    printf '%s' \
+      'https://oaitriton.blob.core.windows.net/public/llvm-builds/llvm-a66376b0-ubuntu-arm64.tar.gz' \
+      > /root/.triton/llvm/llvm-a66376b0-ubuntu-arm64/version.txt && \
+    rm /tmp/llvm.parallel.tar.gz
+
+RUN git clone --branch release/3.3.x --depth=1 --recursive \
+      https://github.com/triton-lang/triton /opt/triton && \
+    cd /opt/triton && \
+    sed -i \
+      -e 's|LLVMAMDGPUCodeGen||g' \
+      -e 's|LLVMAMDGPUAsmParser||g' \
+      -e 's|-Werror|-Wno-error|g' \
+      CMakeLists.txt && \
+    cd python && \
+    python3 setup.py bdist_wheel --dist-dir /opt && \
+    cd / && \
+    rm -rf /opt/triton && \
+    uv pip install --system /opt/triton*.whl && \
+    python3 -c 'import torch, triton; print(torch.__version__, triton.__version__)'

@@ -1,0 +1,207 @@
+diff --git a/Examples/RGB-D/rgbd_tum.cc b/Examples/RGB-D/rgbd_tum.cc
+index d420da5..cb9baee 100644
+--- a/Examples/RGB-D/rgbd_tum.cc
++++ b/Examples/RGB-D/rgbd_tum.cc
+@@ -110,6 +110,10 @@ int main(int argc, char **argv)
+ #endif
+ 
+         double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
++#ifdef REGISTER_TIMES
++        double ttrack_ms = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t2 - t1).count();
++        SLAM.InsertTrackTime(ttrack_ms);
++#endif
+ 
+         vTimesTrack[ni]=ttrack;
+ 
+diff --git a/include/LocalMapping.h b/include/LocalMapping.h
+index dd04a3d..cf20fd0 100644
+--- a/include/LocalMapping.h
++++ b/include/LocalMapping.h
+@@ -128,6 +128,7 @@ public:
+     vector<int> vnLBA_MPs;
+     int nLBA_exec;
+     int nLBA_abort;
++    vector<int> vnQueueSize;
+ #endif
+ protected:
+ 
+diff --git a/include/Tracking.h b/include/Tracking.h
+index 863c98e..201f2e2 100644
+--- a/include/Tracking.h
++++ b/include/Tracking.h
+@@ -190,6 +190,10 @@ public:
+     vector<double> vdLMTrack_ms;
+     vector<double> vdNewKF_ms;
+     vector<double> vdTrackTotal_ms;
++    vector<int> vnFeatures;
++    vector<int> vnMatchesInliers;
++    vector<int> vnTrackedMapPoints;
++    vector<int> vnTrackingState;
+ #endif
+ 
+ protected:
+diff --git a/src/LocalMapping.cc b/src/LocalMapping.cc
+index 53df332..1bb870b 100644
+--- a/src/LocalMapping.cc
++++ b/src/LocalMapping.cc
+@@ -76,6 +76,7 @@ void LocalMapping::Run()
+ #ifdef REGISTER_TIMES
+             double timeLBA_ms = 0;
+             double timeKFCulling_ms = 0;
++            int queueSize = KeyframesInQueue();
+ 
+             std::chrono::steady_clock::time_point time_StartProcessKF = std::chrono::steady_clock::now();
+ #endif
+@@ -243,8 +244,9 @@ void LocalMapping::Run()
+             }
+ 
+ #ifdef REGISTER_TIMES
+-            vdLBASync_ms.push_back(timeKFCulling_ms);
++            vdLBASync_ms.push_back(timeLBA_ms);
+             vdKFCullingSync_ms.push_back(timeKFCulling_ms);
++            vnQueueSize.push_back(queueSize);
+ #endif
+ 
+             mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
+diff --git a/src/Tracking.cc b/src/Tracking.cc
+index 5191451..401e94c 100644
+--- a/src/Tracking.cc
++++ b/src/Tracking.cc
+@@ -48,6 +48,8 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
+     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpAtlas(pAtlas), mnLastRelocFrameId(0), time_recently_lost(5.0),
+     mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr), mpLastKeyFrame(static_cast<KeyFrame*>(NULL))
+ {
++    mnMatchesInliers = 0;
++
+     // Load camera parameters from settings file
+     if(settings){
+         newParameterLoader(settings);
+@@ -127,6 +129,10 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
+     vdLMTrack_ms.clear();
+     vdNewKF_ms.clear();
+     vdTrackTotal_ms.clear();
++    vnFeatures.clear();
++    vnMatchesInliers.clear();
++    vnTrackedMapPoints.clear();
++    vnTrackingState.clear();
+ #endif
+ }
+ 
+@@ -186,12 +192,18 @@ void Tracking::LocalMapStats2File()
+     ofstream f;
+     f.open("LocalMapTimeStats.txt");
+     f << fixed << setprecision(6);
+-    f << "#Stereo rect[ms], MP culling[ms], MP creation[ms], LBA[ms], KF culling[ms], Total[ms]" << endl;
++    f << "#KF insertion[ms], MP culling[ms], MP creation[ms], LBA[ms], KF culling[ms], Total[ms], KF queue before processing[#]" << endl;
+     for(int i=0; i<mpLocalMapper->vdLMTotal_ms.size(); ++i)
+     {
++        int queue_size = 0;
++        if(i < mpLocalMapper->vnQueueSize.size())
++        {
++            queue_size = mpLocalMapper->vnQueueSize[i];
++        }
+         f << mpLocalMapper->vdKFInsert_ms[i] << "," << mpLocalMapper->vdMPCulling_ms[i] << ","
+           << mpLocalMapper->vdMPCreation_ms[i] << "," << mpLocalMapper->vdLBASync_ms[i] << ","
+-          << mpLocalMapper->vdKFCullingSync_ms[i] <<  "," << mpLocalMapper->vdLMTotal_ms[i] << endl;
++          << mpLocalMapper->vdKFCullingSync_ms[i] <<  "," << mpLocalMapper->vdLMTotal_ms[i] << ","
++          << queue_size << endl;
+     }
+ 
+     f.close();
+@@ -199,9 +211,9 @@ void Tracking::LocalMapStats2File()
+     f.open("LBA_Stats.txt");
+     f << fixed << setprecision(6);
+     f << "#LBA time[ms], KF opt[#], KF fixed[#], MP[#], Edges[#]" << endl;
+-    for(int i=0; i<mpLocalMapper->vdLBASync_ms.size(); ++i)
++    for(int i=0; i<mpLocalMapper->vdLBA_ms.size(); ++i)
+     {
+-        f << mpLocalMapper->vdLBASync_ms[i] << "," << mpLocalMapper->vnLBA_KFopt[i] << ","
++        f << mpLocalMapper->vdLBA_ms[i] << "," << mpLocalMapper->vnLBA_KFopt[i] << ","
+           << mpLocalMapper->vnLBA_KFfixed[i] << "," << mpLocalMapper->vnLBA_MPs[i] << ","
+           << mpLocalMapper->vnLBA_edges[i] << endl;
+     }
+@@ -225,7 +237,7 @@ void Tracking::TrackStats2File()
+     f.open("TrackingTimeStats.txt");
+     f << fixed << setprecision(6);
+ 
+-    f << "#Image Rect[ms], Image Resize[ms], ORB ext[ms], Stereo match[ms], IMU preint[ms], Pose pred[ms], LM track[ms], KF dec[ms], Total[ms]" << endl;
++    f << "#Image Rect[ms], Image Resize[ms], ORB ext[ms], Stereo match[ms], IMU preint[ms], Pose pred[ms], LM track[ms], KF dec[ms], Total[ms], Features[#], Inliers[#], Tracked MPs[#], Tracking state[#]" << endl;
+ 
+     for(int i=0; i<vdTrackTotal_ms.size(); ++i)
+     {
+@@ -252,9 +264,51 @@ void Tracking::TrackStats2File()
+         {
+             imu_preint = vdIMUInteg_ms[i];
+         }
++        double orb_extract = 0.0;
++        double pose_pred = 0.0;
++        double lm_track = 0.0;
++        double new_kf = 0.0;
++        if(i < vdORBExtract_ms.size())
++        {
++            orb_extract = vdORBExtract_ms[i];
++        }
++        if(i < vdPosePred_ms.size())
++        {
++            pose_pred = vdPosePred_ms[i];
++        }
++        if(i < vdLMTrack_ms.size())
++        {
++            lm_track = vdLMTrack_ms[i];
++        }
++        if(i < vdNewKF_ms.size())
++        {
++            new_kf = vdNewKF_ms[i];
++        }
++
++        int n_features = 0;
++        int n_inliers = 0;
++        int n_tracked_mps = 0;
++        int tracking_state = 0;
++        if(i < vnFeatures.size())
++        {
++            n_features = vnFeatures[i];
++        }
++        if(i < vnMatchesInliers.size())
++        {
++            n_inliers = vnMatchesInliers[i];
++        }
++        if(i < vnTrackedMapPoints.size())
++        {
++            n_tracked_mps = vnTrackedMapPoints[i];
++        }
++        if(i < vnTrackingState.size())
++        {
++            tracking_state = vnTrackingState[i];
++        }
+ 
+-        f << stereo_rect << "," << resize_image << "," << vdORBExtract_ms[i] << "," << stereo_match << "," << imu_preint << ","
+-          << vdPosePred_ms[i] <<  "," << vdLMTrack_ms[i] << "," << vdNewKF_ms[i] << "," << vdTrackTotal_ms[i] << endl;
++        f << stereo_rect << "," << resize_image << "," << orb_extract << "," << stereo_match << "," << imu_preint << ","
++          << pose_pred <<  "," << lm_track << "," << new_kf << "," << vdTrackTotal_ms[i] << ","
++          << n_features << "," << n_inliers << "," << n_tracked_mps << "," << tracking_state << endl;
+     }
+ 
+     f.close();
+@@ -2319,6 +2373,21 @@ void Tracking::Track()
+ 
+     }
+ 
++#ifdef REGISTER_TIMES
++    int nTrackedMapPoints = 0;
++    for(vector<MapPoint*>::const_iterator itMP = mCurrentFrame.mvpMapPoints.begin(), itEnd = mCurrentFrame.mvpMapPoints.end(); itMP != itEnd; ++itMP)
++    {
++        if(*itMP)
++        {
++            nTrackedMapPoints++;
++        }
++    }
++    vnFeatures.push_back(mCurrentFrame.N);
++    vnMatchesInliers.push_back(mnMatchesInliers);
++    vnTrackedMapPoints.push_back(nTrackedMapPoints);
++    vnTrackingState.push_back(static_cast<int>(mState));
++#endif
++
+ #ifdef REGISTER_LOOP
+     if (Stop()) {
+ 

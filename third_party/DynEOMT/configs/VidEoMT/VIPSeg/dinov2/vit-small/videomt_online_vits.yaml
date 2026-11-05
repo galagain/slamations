@@ -1,0 +1,24 @@
+_BASE_: ../vit-large/videomt_online_vitl.yaml
+
+MODEL:
+  WEIGHTS: "checkpoints/videomt/ytvis2019/yt_2019_vit_small_52.8.pth"
+  BACKBONE:
+    HIDDEN_DIM: 384
+    SEGMENTER_BLOCKS: [9, 10, 11]
+    MODEL_NAME: "vit_small_patch14_reg4_dinov2"
+    DEC_LAYERS: 3
+
+SOLVER:
+  IMS_PER_BATCH: 1
+  BASE_LR: 0.0000125
+  CHECKPOINT_PERIOD: 5000
+
+INPUT:
+  SAMPLING_FRAME_NUM: 3
+  SAMPLING_FRAME_RANGE: 1
+  REVERSE_AGU: False
+
+TEST:
+  EVAL_PERIOD: 5000
+
+OUTPUT_DIR: "outputs/videomt_retrain/vipseg/vit-small"

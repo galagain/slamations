@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.coverage
+
+# Models and experiment artifacts
+*.pth
+*.pt
+*.ckpt
+*.out
+checkpoints/
+outputs/
+logs/
+wandb/
+booster_jobs/
+jobs/
+
+# External code and raw datasets
+external/
+datasets/VIPSeg/
+datasets/ovis/
+datasets/ytvis_2019/
+datasets/ytvis_2021/
+datasets/ytvis_2022/
+datasets/VSPW_480p/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store

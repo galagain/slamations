@@ -1,0 +1,20 @@
+{
+  "profile": "runtime",
+  "methods": 24,
+  "removed": "campagnes, résultats, logs, variantes ablation et données exemples TUM/EuRoC et pose-graph ; sources C++ et calibrations Examples_old conservées",
+  "kept_presets": {
+    "antslam": [
+      "tum_rgbd_nfeatures_1000"
+    ],
+    "antsslam": [
+      "tum_rgbd_nfeatures_1000",
+      "tum_rgbd_semantic_tokenmask_stride16_exact",
+      "tum_rgbd_semantic_segnet_latest",
+      "tum_rgbd_semantic_maskrcnn_latest"
+    ],
+    "DynSLAM": [
+      "tum_rgbd_dyneomt_stride16_exact"
+    ]
+  },
+  "external_assets": "datasets, vocabulaires, poids réseaux, images Docker et fichiers compilés"
+}

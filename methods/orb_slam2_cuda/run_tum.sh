@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+sequence="${1:-${TUM_SEQUENCE:-}}"
+[[ -n "$sequence" ]] || { echo "usage: $0 /path/to/tum_sequence" >&2; exit 2; }
+method_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root_dir="$(cd "$method_dir/../.." && pwd)"
+"$root_dir/common/run_docker_tum.sh" "$method_dir" ORB_SLAM2_CUDA_IMAGE "thesis/orb_slam2_cuda:jetson-r36.3-tum" ORB_SLAM2_CUDA_OUTPUT /usr/local/bin/run_tum_inside.sh "$sequence"

@@ -1,0 +1,30 @@
+_BASE_: ../../../../VidEoMT/VSPW/dinov2/vit-large/videomt_online_vitl.yaml
+
+MODEL:
+  WEIGHTS: "checkpoints/vspw_vit_large_95.0_64.9.pth"
+  DYNAMIC:
+    ENABLED: True
+    DATASET: "vspw"
+    TARGET_ROOT: "outputs/dynamic_targets/labels"
+    REQUIRED: True
+    WEIGHT: 1.0
+    POS_WEIGHT: 8.0
+    HIDDEN_DIM: 256
+    LR_MULTIPLIER: 8.0
+    EVAL_ENABLED: True
+    EVAL_IOU_THRESHOLD: 0.5
+
+SOLVER:
+  IMS_PER_BATCH: 1
+  BASE_LR: 0.0000125
+  CHECKPOINT_PERIOD: 5000
+
+INPUT:
+  SAMPLING_FRAME_NUM: 3
+  SAMPLING_FRAME_RANGE: 1
+  REVERSE_AGU: False
+
+TEST:
+  EVAL_PERIOD: 5000
+
+OUTPUT_DIR: "outputs/dyneomt/vspw/vit-large"

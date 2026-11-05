@@ -1,0 +1,36 @@
+%YAML:1.0
+
+Camera.fx: 535.4
+Camera.fy: 539.2
+Camera.cx: 320.1
+Camera.cy: 247.6
+
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+Camera.k3: 0.0
+
+Camera.width: 640
+Camera.height: 480
+Camera.fps: 30.0
+Camera.bf: 40.0
+Camera.RGB: 1
+
+ChooseData: 3
+DepthMapFactor: 5000.0
+ThDepthBG: 6.0
+ThDepthOBJ: 6.0
+MaxTrackPointBG: 1200
+MaxTrackPointOBJ: 800
+SFMgThres: 0.12
+SFDsThres: 0.3
+WINDOW_SIZE: 20
+OVERLAP_SIZE: 4
+UseSampleFeature: 0
+
+ORBextractor.nFeatures: 2500
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7

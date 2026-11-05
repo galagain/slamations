@@ -1,0 +1,43 @@
+FROM campagne/rds_slam:tum-rgbd
+
+ENV RDS_SLAM_ROOT=/root/catkin_ws/src/RDS-SLAM
+
+RUN sed -i 's/std::thread(spin_thread);/ros::AsyncSpinner spinner(1); spinner.start();/' \
+      ${RDS_SLAM_ROOT}/SLAM/Examples/ros_tum_rgbd.cpp \
+	 && sed -i 's/ORB_SLAM3::System SLAM(argv\[1\], argv\[2\], ORB_SLAM3::System::RGBD, true);/ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::RGBD, false);/' \
+	      ${RDS_SLAM_ROOT}/SLAM/Examples/ros_tum_rgbd.cpp \
+	 && perl -0pi -e 's#    // Stop all threads\n    SLAM.Shutdown\(\);#    // Save trajectories before semantic cleanup, so a late shutdown failure still leaves usable TUM output.\n    if (argc >= 6) {\n        const std::string resultPath(argv[5]);\n        SLAM.SaveTrajectoryTUM(resultPath + "/CameraTrajectory.txt");\n        SLAM.SaveKeyFrameTrajectoryTUM(resultPath + "/KeyFrameTrajectory.txt");\n    }\n    SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");\n    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");\n\n    // Stop all threads\n    SLAM.Shutdown();#' \
+	      ${RDS_SLAM_ROOT}/SLAM/Examples/ros_tum_rgbd.cpp \
+	 && sed -i 's#SLAM.TrackRGBD(imRGB, imD, tframe);#SLAM.TrackRGBD(imRGB, imD, tframe, std::string(argv[3]) + "/" + vstrImageFilenamesD[ni]);#' \
+	      ${RDS_SLAM_ROOT}/SLAM/Examples/ros_tum_rgbd.cpp \
+	 && find ${RDS_SLAM_ROOT}/SLAM ${RDS_SLAM_ROOT}/SegNet_ROS -type f \( -name '*.cc' -o -name '*.cpp' -o -name '*.h' \) \
+      -exec sed -i -E \
+        -e 's#^([[:space:]]*)cv::(namedWindow|imshow|waitKey)\(#\1// cv::\2(#' {} + \
+ && sed -i \
+      -e 's/cv_bridge::toCvCopy(mResult->label)/cv_bridge::toCvCopy(mResult->label, sensor_msgs::image_encodings::MONO8)/g' \
+      -e 's/cv_bridge::toCvCopy(result->label)/cv_bridge::toCvCopy(result->label, sensor_msgs::image_encodings::MONO8)/g' \
+      -e 's/cv_bridge::toCvCopy(result->label_color)/cv_bridge::toCvCopy(result->label_color, sensor_msgs::image_encodings::BGR8)/g' \
+      ${RDS_SLAM_ROOT}/SegNet_ROS/include/segnet_ros/segnet_client.h \
+      ${RDS_SLAM_ROOT}/SegNet_ROS/src/action_client_node.cpp \
+ && perl -0pi -e 's#            cv::Mat label = cv_bridge::toCvCopy\(mResult->label, sensor_msgs::image_encodings::MONO8\)->image;#            const sensor_msgs::Image& label_msg = mResult->label;\n            cv::Mat label;\n            if (label_msg.height > 0 && label_msg.width > 0 && !label_msg.data.empty()) {\n                label = cv::Mat(label_msg.height, label_msg.width, CV_8UC1, const_cast<unsigned char*>(label_msg.data.data()), label_msg.step).clone();\n            } else {\n                label = cv::Mat::zeros(in_images[i].rows, in_images[i].cols, CV_8UC1);\n            }#' \
+      ${RDS_SLAM_ROOT}/SegNet_ROS/include/segnet_ros/segnet_client.h \
+ && sed -i '/mbFinishRequested = true;/a\    { std::unique_lock<std::mutex> lockKFs(mMutexNewKFs); mlNewKeyFrames.clear(); }\n    { std::unique_lock<std::mutex> lockTrack(mMutexSemanticTrack); mlSemanticTrack.clear(); }' \
+      ${RDS_SLAM_ROOT}/SLAM/src/Semantic.cpp \
+ && sed -i '/mKernel = getStructuringElement/,/cv::Point(mDilation_size, mDilation_size));/c\    mKernel = cv::Mat::ones(2 * mDilation_size + 1, 2 * mDilation_size + 1, CV_8U);' \
+      ${RDS_SLAM_ROOT}/SLAM/src/Semantic.cpp \
+ && sed -i \
+      's#find_package(OpenCV 3.3.1)#find_package(OpenCV 4.5 REQUIRED PATHS /usr/lib/aarch64-linux-gnu/cmake/opencv4 NO_DEFAULT_PATH)#' \
+      ${RDS_SLAM_ROOT}/SLAM/CMakeLists.txt \
+ && sed -i \
+      's#find_package(OpenCV 3.0 REQUIRED)#find_package(OpenCV 4.5 REQUIRED PATHS /usr/lib/aarch64-linux-gnu/cmake/opencv4 NO_DEFAULT_PATH)#' \
+      ${RDS_SLAM_ROOT}/MaskRCNN_ROS/CMakeLists.txt \
+ && rm -rf /root/catkin_ws/build/RDS-SLAM/SLAM \
+           /root/catkin_ws/build/RDS-SLAM/MaskRCNN_ROS \
+           /root/catkin_ws/devel/lib/rds_slam \
+           /root/catkin_ws/devel/lib/librds_slam.so \
+ && /bin/bash -lc "source /opt/ros/noetic/setup.bash && \
+    source /root/catkin_ws/devel/setup.bash && \
+    cd /root/catkin_ws && catkin_make -DCMAKE_BUILD_TYPE=Release"
+
+WORKDIR /workspace
+ENTRYPOINT ["/bin/bash"]

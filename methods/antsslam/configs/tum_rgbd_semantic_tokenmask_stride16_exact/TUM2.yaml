@@ -1,0 +1,90 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters. Adjust them!
+#--------------------------------------------------------------------------------------------
+File.version: "1.0"
+
+Camera.type: "PinHole"
+
+# Camera calibration and distortion parameters (OpenCV) 
+Camera1.fx: 520.908620
+Camera1.fy: 521.007327
+Camera1.cx: 325.141442
+Camera1.cy: 249.701764
+
+Camera1.k1: 0.231222
+Camera1.k2: -0.784899
+Camera1.p1: -0.003257
+Camera1.p2: -0.000105
+Camera1.k3: 0.917205
+
+Camera.width: 640
+Camera.height: 480
+
+# Camera frames per second 
+Camera.fps: 30
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+Camera.RGB: 1
+
+# Close/Far threshold. Baseline times.
+Stereo.ThDepth: 40.0
+Stereo.b: 0.0767
+
+# Depth map values factor
+RGBD.DepthMapFactor: 5208.0
+
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters
+#--------------------------------------------------------------------------------------------
+
+# ORB Extractor: Number of features per image
+ORBextractor.nFeatures: 1000
+
+# ORB Extractor: Scale factor between levels in the scale pyramid 	
+ORBextractor.scaleFactor: 1.2
+
+# ORB Extractor: Number of levels in the scale pyramid	
+ORBextractor.nLevels: 8
+
+# ORB Extractor: Fast threshold
+# Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
+# Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
+# You can lower these values if your images have low contrast			
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0
+
+#--------------------------------------------------------------------------------------------
+# Semantic Masking Parameters
+#--------------------------------------------------------------------------------------------
+Semantic.enabled: 1
+Semantic.backend: "tokenmask"
+Semantic.root: "/opt/semantic/segmentation"
+Semantic.tokenmask_dataset: "cityscapes"
+Semantic.tokenmask_model: "/opt/semantic/tokenmask_models/ours_tiny_city.onnx"
+Semantic.tokenmask_engine: "/opt/semantic/trt_cache/ours_tiny_city_1024x1024_fp16.engine"
+Semantic.tokenmask_input_width: 1024
+Semantic.tokenmask_input_height: 1024
+Semantic.frame_stride: 16
+Semantic.max_mask_age: 0
+Semantic.dilate: 0
+Semantic.submit_before_orb: 0
+Semantic.skip_until_initialized: 1
+Semantic.min_kept_features: 0
+Semantic.min_keep_ratio: 0.0
