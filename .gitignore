@@ -1,0 +1,48 @@
+# Build and runtime output
+**/.docker_context/
+**/build/
+**/build_*/
+**/cache/
+**/__pycache__/
+*.pyc
+*.o
+*.a
+*.so
+*.so.*
+# Models, datasets, and recordings
+*.pth
+*.pt
+*.onnx
+*.engine
+*.plan
+*.caffemodel
+*.bag
+*.mcap
+*.mp4
+*.avi
+*.tar.gz
+*.zip
+**/Vocabulary/ORBvoc.txt
+# Local credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime-only artifacts and experiments
+**/results/
+/campaigns/
+/artifacts/
+/assets/
+*.log
+*.tar
+*.tar.zst
+*.bundle
+.env.local
+
+*.h5
+*.npy
+*.npz
+*.mkv
+*.fp16
+*.fp32
